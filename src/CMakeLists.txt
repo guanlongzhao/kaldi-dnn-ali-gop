@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 2.6)
-project (kaldi-gop)
+project (kaldi-dnn-gop)
 
 # Kaldi's path
 set(KALDI_ROOT /home/guanlong/Desktop/kaldi-5.1)  # please edit this line
@@ -24,6 +24,8 @@ target_link_libraries(gop ${KALDI_ROOT}/src/tree/kaldi-tree.a)
 target_link_libraries(gop ${KALDI_ROOT}/src/util/kaldi-util.a)
 target_link_libraries(gop ${KALDI_ROOT}/src/matrix/kaldi-matrix.a)
 target_link_libraries(gop ${KALDI_ROOT}/src/base/kaldi-base.a)
+target_link_libraries(gop ${KALDI_ROOT}/src/nnet2/kaldi-nnet2.a)
+target_link_libraries(gop ${KALDI_ROOT}/src/matrix/kaldi-matrix.a)
 target_link_libraries(gop ${KALDI_ROOT}/tools/openfst/lib/libfst.a)
 target_link_libraries(gop dl.so)
 target_link_libraries(gop /usr/lib/libatlas.so.3)
@@ -31,8 +33,8 @@ target_link_libraries(gop /usr/lib/libf77blas.so.3)
 target_link_libraries(gop /usr/lib/libcblas.so.3)
 target_link_libraries(gop /usr/lib/liblapack_atlas.so.3)
 
-# compute-gmm-gop
-add_executable(compute-gmm-gop gopbin/compute-gmm-gop.cc)
-target_link_libraries(compute-gmm-gop gop)
+# compute-dnn-gop
+add_executable(compute-dnn-gop gopbin/compute-dnn-gop.cc)
+target_link_libraries(compute-dnn-gop gop)
 find_package(Threads)
-target_link_libraries(compute-gmm-gop ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(compute-dnn-gop ${CMAKE_THREAD_LIBS_INIT})
