@@ -26,9 +26,8 @@
 #include "hmm/transition-model.h"
 #include "decoder/faster-decoder.h"
 #include "fstext/fstext-utils.h"
-#include "nnet3/nnet-am-decodable-simple.h"
-#include "nnet3/nnet-utils.h"
-#include "nnet3/am-nnet-simple.h"
+#include "nnet2/decodable-am-nnet.h"
+#include "matrix/matrix-common.h"
 
 namespace kaldi {
 
@@ -38,15 +37,14 @@ public:
   void Init(std::string &tree_in_filename,
             std::string &model_in_filename,
             std::string &lex_in_filename);
-  void Compute(const Matrix<BaseFloat> &feats, const Matrix<BaseFloat> *online_ivectors, 
-                const std::vector<int32> &transcript);
+  void Compute(const CuMatrix<BaseFloat> &feats, const std::vector<int32> &transcript);
   Vector<BaseFloat>& Result();
   std::vector<int32>& get_alignment();
   std::vector<int32>& Phonemes();
   Vector<BaseFloat>& get_phn_ll();
 
 protected:
-  nnet3::AmNnetSimple am_;
+  nnet2::AmNnet am_;
   TransitionModel tm_;
   ContextDependency ctx_dep_;
   TrainingGraphCompiler *gc_;
@@ -57,13 +55,13 @@ protected:
   Vector<BaseFloat> phones_loglikelihood_; // phoneme log likelihood
 
   BaseFloat Decode(fst::VectorFst<fst::StdArc> &fst,
-                   nnet3::DecodableAmNnetSimple &decodable,
+                   nnet2::DecodableAmNnet &decodable,
                    std::vector<int32> *align = NULL);                   
-  BaseFloat ComputeGopNumera(nnet3::DecodableAmNnetSimple &decodable,
+  BaseFloat ComputeGopNumera(nnet2::DecodableAmNnet &decodable,
                                     int32 phone_l, int32 phone, int32 phone_r,
                                     MatrixIndexT start_frame,
                                     int32 size);
-  BaseFloat ComputeGopDenomin(nnet3::DecodableAmNnetSimple &decodable,
+  BaseFloat ComputeGopDenomin(nnet2::DecodableAmNnet &decodable,
                               int32 phone_l, int32 phone_r,
                               MatrixIndexT start_frame,
                               int32 size);

@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
     
     const char *usage =
         "Compute GOP with DNN-based models.\n"
-        "Usage:   compute-dnn-gop [options] tree-in model-in lexicon-fst-in feature-rspecifier online_ivector-rspecifier "
+        "Usage:   compute-dnn-gop [options] tree-in model-in lexicon-fst-in feature-rspecifier "
         "transcriptions-rspecifier gop-wspecifier alignment-wspecifier phoneme_log_likelihood-wspecifier\n"
         "e.g.: \n"
         " compute-gmm-gop tree 1.mdl lex.fst scp:train.scp ark:train.tra ark,t:gop.1 ark,t:algin.1 ark,t:phn_ll.1\n";
@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
                  "yes|no|optional|wait, only has effect if compiled with CUDA");
 
     po.Read(argc, argv);
-    if (po.NumArgs() != 9) {
+    if (po.NumArgs() != 8) {
       po.PrintUsage();
       exit(1);
     }
@@ -49,14 +49,12 @@ int main(int argc, char *argv[]) {
     std::string model_in_filename = po.GetArg(2);
     std::string lex_in_filename = po.GetArg(3);
     std::string feature_rspecifier = po.GetArg(4);
-    std::string online_ivector_rspecifier = po.GetArg(5);
-    std::string transcript_rspecifier = po.GetArg(6);
-    std::string gop_wspecifier = po.GetArg(7);
-    std::string alignment_wspecifier = po.GetArg(8);
-    std::string phn_ll_wspecifier = po.GetArg(9);
+    std::string transcript_rspecifier = po.GetArg(5);
+    std::string gop_wspecifier = po.GetArg(6);
+    std::string alignment_wspecifier = po.GetArg(7);
+    std::string phn_ll_wspecifier = po.GetArg(8);
 
-    SequentialBaseFloatMatrixReader feature_reader(feature_rspecifier);
-    RandomAccessBaseFloatMatrixReader online_ivector_reader(online_ivector_rspecifier);
+    SequentialBaseFloatCuMatrixReader feature_reader(feature_rspecifier);
     RandomAccessInt32VectorReader transcript_reader(transcript_rspecifier);
     BaseFloatVectorWriter gop_writer(gop_wspecifier);
     Int32VectorWriter alignment_writer(alignment_wspecifier);
@@ -75,12 +73,10 @@ int main(int argc, char *argv[]) {
 
       //KALDI_LOG << "Processing utterance " << utt;
 
-      const Matrix<BaseFloat> &features = feature_reader.Value();
-      const Matrix<BaseFloat> *online_ivector = &online_ivector_reader.Value(utt);
-      //KALDI_LOG << "ivector dimension is " << online_ivector->NumRows();
+      const CuMatrix<BaseFloat> &features = feature_reader.Value();
       const std::vector<int32> &transcript = transcript_reader.Value(utt);
 
-      gop.Compute(features, online_ivector, transcript);
+      gop.Compute(features, transcript);
       gop_writer.Write(utt, gop.Result());
       alignment_writer.Write(utt, gop.get_alignment());
       phn_ll_writer.Write(utt, gop.get_phn_ll());

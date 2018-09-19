@@ -29,9 +29,6 @@
 #include "lat/kaldi-lattice.h"
 #include "hmm/hmm-utils.h"
 #include "gop/dnn-gop.h"
-#include "nnet3/nnet-am-decodable-simple.h"
-#include "nnet3/nnet-utils.h"
-#include "nnet3/am-nnet-simple.h"
 
 namespace kaldi {
 
@@ -59,7 +56,7 @@ void DnnGop::Init(std::string &tree_in_filename,
 }
 
 BaseFloat DnnGop::Decode(fst::VectorFst<fst::StdArc> &fst,
-                         nnet3::DecodableAmNnetSimple &decodable,
+                         nnet2::DecodableAmNnet &decodable,
                          std::vector<int32> *align) {
   FasterDecoderOptions decode_opts;
   decode_opts.beam = 500; // number of beams for decoding. Larger, slower and more successful alignments. Smaller, more unsuccessful alignments.
@@ -78,7 +75,7 @@ BaseFloat DnnGop::Decode(fst::VectorFst<fst::StdArc> &fst,
   return likelihood;
 }
 
-BaseFloat DnnGop::ComputeGopNumera(nnet3::DecodableAmNnetSimple &decodable,
+BaseFloat DnnGop::ComputeGopNumera(nnet2::DecodableAmNnet &decodable,
                                           int32 phone_l, int32 phone, int32 phone_r,
                                           MatrixIndexT start_frame,
                                           int32 size) {
@@ -110,7 +107,7 @@ BaseFloat DnnGop::ComputeGopNumera(nnet3::DecodableAmNnetSimple &decodable,
   return likelihood;
 }
 
-BaseFloat DnnGop::ComputeGopDenomin(nnet3::DecodableAmNnetSimple &decodable,
+BaseFloat DnnGop::ComputeGopDenomin(nnet2::DecodableAmNnet &decodable,
                                     int32 phone_l, int32 phone_r,
                                     MatrixIndexT start_frame,
                                     int32 size) {
@@ -163,23 +160,12 @@ void DnnGop::GetContextFromSplit(std::vector<std::vector<int32> > split,
   phone_r = (index < split.size() - 1) ? tm_.TransitionIdToPhone(split[index+1][0]): 1;
 }
 
-void DnnGop::Compute(const Matrix<BaseFloat> &feats,
-                     const Matrix<BaseFloat> *online_ivectors,
+void DnnGop::Compute(const CuMatrix<BaseFloat> &feats,
                      const std::vector<int32> &transcript) {
   // Align
   fst::VectorFst<fst::StdArc> ali_fst;
   gc_->CompileGraphFromText(transcript, &ali_fst);
-
-  nnet3::SetBatchnormTestMode(true, &(am_.GetNnet()));
-  nnet3::SetDropoutTestMode(true, &(am_.GetNnet()));
-  nnet3::CollapseModel(nnet3::CollapseModelConfig(), &(am_.GetNnet()));
-  nnet3::NnetSimpleComputationOptions decodable_opts;
-  decodable_opts.acoustic_scale = 1.0;
-  //decodable_opts.frames_per_chunk = feats.NumRows();
-  nnet3::CachingOptimizingCompiler compiler(am_.GetNnet(),decodable_opts.optimize_config);
-  int32 online_ivector_period = 10;
-  nnet3::DecodableAmNnetSimple ali_decodable(decodable_opts, tm_, am_, feats, NULL, 
-                    online_ivectors, online_ivector_period, &compiler);
+  nnet2::DecodableAmNnet ali_decodable(tm_, am_, feats, true, 1.0);
   //std::vector<int32> align;
   Decode(ali_fst, ali_decodable, &alignment_);
   KALDI_ASSERT(feats.NumRows() == alignment_.size());
@@ -192,19 +178,9 @@ void DnnGop::Compute(const Matrix<BaseFloat> &feats,
   phones_loglikelihood_.Resize(split.size());
   int32 frame_start_idx = 0;
   for (MatrixIndexT i = 0; i < split.size(); i++) {
-    SubMatrix<BaseFloat> feats_in_phone = feats.Range(frame_start_idx, split[i].size(),
-                                                      0, feats.NumCols());
-    SubMatrix<BaseFloat> ivector_in_phone = online_ivectors->Range(frame_start_idx/online_ivector_period, 
-                                                      kaldi::MatrixIndexT(std::min(int32(split[i].size()/online_ivector_period+1), 
-                                                        int32(online_ivectors->NumRows())-int32(frame_start_idx/online_ivector_period))),
-                                                      0, online_ivectors->NumCols());
-    const Matrix<BaseFloat> features(feats_in_phone);
-    const Matrix<BaseFloat> online_ivectors_feat(ivector_in_phone);
-
     int32 phone, phone_l, phone_r;
     GetContextFromSplit(split, i, phone_l, phone, phone_r);
 
-    bool use_viterbi_numera = true;
     BaseFloat gop_numerator = ComputeGopNumera(ali_decodable, phone_l, phone, phone_r, frame_start_idx, split[i].size());
     BaseFloat gop_denominator = ComputeGopDenomin(ali_decodable, phone_l, phone_r, frame_start_idx, split[i].size());
     gop_result_(i) = (gop_numerator - gop_denominator) / split[i].size();
