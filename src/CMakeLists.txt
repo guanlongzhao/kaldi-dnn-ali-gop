@@ -2,7 +2,7 @@ cmake_minimum_required (VERSION 2.6)
 project (kaldi-dnn-gop)
 
 # Kaldi's path
-set(KALDI_ROOT /home/guanlong/Desktop/kaldi-5.1)  # please edit this line
+set(KALDI_ROOT /home/guanlong/Tools/kaldi)  # please edit this line
 
 # Settings
 add_compile_options(-std=c++11)
@@ -10,6 +10,7 @@ add_definitions(-DHAVE_ATLAS)
 add_definitions(-Wno-deprecated-declarations)
 include_directories("${KALDI_ROOT}/src")
 include_directories("${KALDI_ROOT}/tools/openfst/include")
+# atlas header files are not in the system path
 include_directories("${KALDI_ROOT}/tools/ATLAS/include")
 
 # gop
@@ -26,12 +27,18 @@ target_link_libraries(gop ${KALDI_ROOT}/src/matrix/kaldi-matrix.a)
 target_link_libraries(gop ${KALDI_ROOT}/src/base/kaldi-base.a)
 target_link_libraries(gop ${KALDI_ROOT}/src/nnet2/kaldi-nnet2.a)
 target_link_libraries(gop ${KALDI_ROOT}/src/matrix/kaldi-matrix.a)
+target_link_libraries(gop ${KALDI_ROOT}/src/cudamatrix/kaldi-cudamatrix.a)
 target_link_libraries(gop ${KALDI_ROOT}/tools/openfst/lib/libfst.a)
 target_link_libraries(gop dl.so)
 target_link_libraries(gop /usr/lib/libatlas.so.3)
 target_link_libraries(gop /usr/lib/libf77blas.so.3)
 target_link_libraries(gop /usr/lib/libcblas.so.3)
 target_link_libraries(gop /usr/lib/liblapack_atlas.so.3)
+# cuda related libs, from kaldi/src/kaldi.mk
+target_link_libraries(gop /usr/local/cuda/lib64/libcublas.so)
+target_link_libraries(gop /usr/local/cuda/lib64/libcusparse.so)
+target_link_libraries(gop /usr/local/cuda/lib64/libcudart.so)
+target_link_libraries(gop /usr/local/cuda/lib64/libcurand.so)
 
 # compute-dnn-gop
 add_executable(compute-dnn-gop gopbin/compute-dnn-gop.cc)
