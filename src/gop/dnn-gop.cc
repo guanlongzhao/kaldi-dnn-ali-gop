@@ -1,9 +1,10 @@
-// gop/gop-gmm.cc
+// gop/dnn-gop.cc
 
-// Copyright 2016-2017  Junbo Zhang
+// Copyright 2016-2018  Junbo Zhang
 //                      Ming Tu
+//                      Guanlong Zhao
 
-// This program based on Kaldi (https://github.com/kaldi-asr/kaldi).
+// This program is based on Kaldi (https://github.com/kaldi-asr/kaldi).
 // However, this program is NOT UNDER THE SAME LICENSE of Kaldi's.
 //
 // This program is free software; you can redistribute it and/or
@@ -85,7 +86,7 @@ BaseFloat DnnGop::ComputeGopNumera(nnet2::DecodableAmNnet &decodable,
   phoneseq[0] = phone_l;
   phoneseq[1] = phone;
   phoneseq[2] = phone_r;
-  
+
   const int pdfclass_num = tm_.GetTopo().NumPdfClasses(phone);
 
   BaseFloat likelihood = 0;
@@ -93,13 +94,20 @@ BaseFloat DnnGop::ComputeGopNumera(nnet2::DecodableAmNnet &decodable,
     Vector<BaseFloat> temp_likelihood(pdfclass_num);
     for (size_t c = 0; c < pdfclass_num; c++) {
       int32 pdf_id;
-      //KALDI_ASSERT(ctx_dep_.Compute(phoneseq, c, &pdf_id));
       if (!ctx_dep_.Compute(phoneseq, c, &pdf_id)) {
         KALDI_ERR << "Failed to obtain pdf_id";
       }
       int32 tid = pdfid_to_tid[pdf_id];
 
-      temp_likelihood(c) = decodable.LogLikelihood(frame, tid); 
+      // The LogLikelihood() is not a probability -- it is P(s|o)/P(s), where s
+      // is an output state (senone) and o is the acoustic observation. Note
+      // that the real numerator in GOP_1 is P(o|s)=P(s|o)P(o)/P(s), but since
+      // the denominator also has P(o) so we can get rid of the acoustic feature
+      // priors. This comment applies to ComputeGopDenomin() too. An issue
+      // caused by this is that the "log likelihood" can be greater than 0, so
+      // when you see a large positive "log likelihood", keep in mind that it is
+      // not a probablity.
+      temp_likelihood(c) = decodable.LogLikelihood(frame, tid);
     }
     likelihood += temp_likelihood.LogSumExp(5);
   }
@@ -121,7 +129,7 @@ BaseFloat DnnGop::ComputeGopDenomin(nnet2::DecodableAmNnet &decodable,
 
   const std::vector<int32> &phone_syms = tm_.GetPhones();
 
-  //Vector<BaseFloat> likelihood(phone_syms.size());
+  // Vector<BaseFloat> likelihood(phone_syms.size());
 
   for (size_t i = 0; i < phone_syms.size(); i++) {
     int32 phone = phone_syms[i];
@@ -133,7 +141,6 @@ BaseFloat DnnGop::ComputeGopDenomin(nnet2::DecodableAmNnet &decodable,
       Vector<BaseFloat> temp_likelihood(pdfclass_num);
       for (size_t c = 0; c < pdfclass_num; c++) {
         int32 pdf_id;
-        //KALDI_ASSERT(ctx_dep_.Compute(phoneseq, c, &pdf_id));
         if (!ctx_dep_.Compute(phoneseq, c, &pdf_id)) {
           KALDI_ERR << "Failed to obtain pdf_id";
         }
@@ -143,10 +150,12 @@ BaseFloat DnnGop::ComputeGopDenomin(nnet2::DecodableAmNnet &decodable,
       }
       phn_likelihood += temp_likelihood.LogSumExp(5);
     }
+    // Take the maximum of the log likelihood among all phonemes.
+    // This is the GOP_1 that Witt & Young (2000) originally proposed.
     if (phn_likelihood > likelihood) {
       likelihood = phn_likelihood;
     }
-    //likelihood(i) = phn_likelihood;
+    // likelihood(i) = phn_likelihood;
   }
 
   return likelihood;
@@ -166,7 +175,6 @@ void DnnGop::Compute(const CuMatrix<BaseFloat> &feats,
   fst::VectorFst<fst::StdArc> ali_fst;
   gc_->CompileGraphFromText(transcript, &ali_fst);
   nnet2::DecodableAmNnet ali_decodable(tm_, am_, feats, true, 1.0);
-  //std::vector<int32> align;
   Decode(ali_fst, ali_decodable, &alignment_);
   KALDI_ASSERT(feats.NumRows() == alignment_.size());
 

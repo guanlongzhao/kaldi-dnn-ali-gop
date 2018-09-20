@@ -1,9 +1,10 @@
-// gop/gop-gmm.h
+// gop/dnn-gop.h
 
-// Copyright 2016-2017  Junbo Zhang
+// Copyright 2016-2018  Junbo Zhang
 //                      Ming Tu
+//                      Guanlong Zhao
 
-// This program based on Kaldi (https://github.com/kaldi-asr/kaldi).
+// This program is based on Kaldi (https://github.com/kaldi-asr/kaldi).
 // However, this program is NOT UNDER THE SAME LICENSE of Kaldi's.
 //
 // This program is free software; you can redistribute it and/or
