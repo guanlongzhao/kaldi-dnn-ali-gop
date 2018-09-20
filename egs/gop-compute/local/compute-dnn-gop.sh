@@ -46,7 +46,7 @@ feats="ark,s,cs:apply-cmvn --utt2spk=ark:$sdata/JOB/utt2spk scp:$sdata/JOB/cmvn.
 echo "$0: computing GOP in $data using model from $amdir, putting results in $gopdir"
 tra="ark:utils/sym2int.pl --map-oov $oov -f 2- $lang/words.txt $sdata/JOB/text|";
 $cmd JOB=1:$nj $gopdir/log/gop.JOB.log \
-  compute-dnn-gop --use-gpu=yes $amdir/tree $amdir/final.mdl $lang/L.fst "$feats" "$tra" "ark,t:$gopdir/gop.JOB" "ark,t:$gopdir/align.JOB" "ark,t:$gopdir/phoneme_ll.JOB" || exit 1;
+  compute-dnn-gop --use-gpu=yes $amdir/tree $amdir/final.mdl $lang/L.fst "$feats" "$tra" "ark,t:$gopdir/gop.JOB" "ark,t:$gopdir/align.JOB" "ark,t:$gopdir/phoneme_ll.JOB" "ark,t:$gopdir/phonemes.JOB" || exit 1;
 
 # Generate alignment
 $cmd JOB=1:$nj $gopdir/log/align.JOB.log \
@@ -64,6 +64,12 @@ for n in $(seq $nj); do
 done > $gopdir/gop.txt || exit 1
 mkdir $gopdir/gop
 mv $gopdir/gop.* $gopdir/gop
+
+# Convert phonemes into human readable format
+for part in $(seq $nj); do 
+  utils/int2sym.pl -f 2- $amdir/phones.txt $gopdir/phonemes.$part > $gopdir/phonemes_sym.$part || exit 1;
+done
+mv $gopdir/phonemes_sym.* $gopdir/gop
 
 python local/ctm2textgrid.py $nj $gopdir $gopdir/aligned_textgrid $lang/words.txt $lang/phones.txt $data/utt2dur
 

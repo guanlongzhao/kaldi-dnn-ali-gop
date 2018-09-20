@@ -1,9 +1,10 @@
-// gopbin/compute-gop-gmm.cc
+// gopbin/compute-gop-dnn.cc
 
-// Copyright 2016-2017  Junbo Zhang
+// Copyright 2016-2018  Junbo Zhang
 //                      Ming Tu
+//                      Guanlong Zhao
 
-// This program based on Kaldi (https://github.com/kaldi-asr/kaldi).
+// This program is based on Kaldi (https://github.com/kaldi-asr/kaldi).
 // However, this program is NOT UNDER THE SAME LICENSE of Kaldi's.
 //
 // This program is free software; you can redistribute it and/or
@@ -26,9 +27,9 @@ int main(int argc, char *argv[]) {
     const char *usage =
         "Compute GOP with DNN-based models.\n"
         "Usage:   compute-dnn-gop [options] tree-in model-in lexicon-fst-in feature-rspecifier "
-        "transcriptions-rspecifier gop-wspecifier alignment-wspecifier phoneme_log_likelihood-wspecifier\n"
+        "transcriptions-rspecifier gop-wspecifier alignment-wspecifier phoneme_log_likelihood-wspecifier phoneme-wspecifier\n"
         "e.g.: \n"
-        " compute-gmm-gop tree 1.mdl lex.fst scp:train.scp ark:train.tra ark,t:gop.1 ark,t:algin.1 ark,t:phn_ll.1\n";
+        " compute-gmm-gop tree 1.mdl lex.fst scp:train.scp ark:train.tra ark,t:gop.1 ark,t:algin.1 ark,t:phn_ll.1 ark,t:1.phoneme\n";
 
     ParseOptions po(usage);
     std::string use_gpu = "no";
@@ -36,7 +37,7 @@ int main(int argc, char *argv[]) {
                  "yes|no|optional|wait, only has effect if compiled with CUDA");
 
     po.Read(argc, argv);
-    if (po.NumArgs() != 8) {
+    if (po.NumArgs() != 9) {
       po.PrintUsage();
       exit(1);
     }
@@ -53,12 +54,14 @@ int main(int argc, char *argv[]) {
     std::string gop_wspecifier = po.GetArg(6);
     std::string alignment_wspecifier = po.GetArg(7);
     std::string phn_ll_wspecifier = po.GetArg(8);
+    std::string phoneme_wspecifier = po.GetArg(9);
 
     SequentialBaseFloatCuMatrixReader feature_reader(feature_rspecifier);
     RandomAccessInt32VectorReader transcript_reader(transcript_rspecifier);
     BaseFloatVectorWriter gop_writer(gop_wspecifier);
     Int32VectorWriter alignment_writer(alignment_wspecifier);
     BaseFloatVectorWriter phn_ll_writer(phn_ll_wspecifier);
+    Int32VectorWriter phoneme_writer(phoneme_wspecifier);
 
     DnnGop gop;
     gop.Init(tree_in_filename, model_in_filename, lex_in_filename);
@@ -71,7 +74,7 @@ int main(int argc, char *argv[]) {
         continue;
       }
 
-      //KALDI_LOG << "Processing utterance " << utt;
+      KALDI_LOG << "Processing utterance " << utt;
 
       const CuMatrix<BaseFloat> &features = feature_reader.Value();
       const std::vector<int32> &transcript = transcript_reader.Value(utt);
@@ -80,6 +83,7 @@ int main(int argc, char *argv[]) {
       gop_writer.Write(utt, gop.Result());
       alignment_writer.Write(utt, gop.get_alignment());
       phn_ll_writer.Write(utt, gop.get_phn_ll());
+      phoneme_writer.Write(utt, gop.Phonemes());
     }
     KALDI_LOG << "Done.";
 # if HAVE_CUDA==1
