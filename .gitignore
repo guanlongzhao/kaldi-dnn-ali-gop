@@ -3,3 +3,20 @@
 
 # build
 src/build/*
+
+# data
+egs/gop-compute/data/*
+
+# exp
+egs/gop-compute/exp/*
+
+# pre-trained model
+egs/gop-compute/am/*
+egs/gop-compute/lm/*
+
+# sym links
+egs/gop-compute/steps
+egs/gop-compute/utils
+
+# pyc
+*.pyc
