@@ -63,7 +63,7 @@ for n in $(seq $nj); do
   cat $gopdir/gop.$n || exit 1;
 done > $gopdir/gop.txt || exit 1
 mkdir $gopdir/gop
-mv gop.* $gopdir/gop
+mv $gopdir/gop.* $gopdir/gop
 
 python local/ctm2textgrid.py $nj $gopdir $gopdir/aligned_textgrid $lang/words.txt $lang/phones.txt $data/utt2dur
 
