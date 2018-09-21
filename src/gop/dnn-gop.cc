@@ -50,7 +50,12 @@ void DnnGop::Init(std::string &tree_in_filename,
   std::vector<int32> disambig_syms;  
   TrainingGraphCompilerOptions gopts;
   gc_ = new TrainingGraphCompiler(tm_, ctx_dep_, lex_fst, disambig_syms, gopts);
-
+  // Technically this mapping is not correct, because multiple transition IDs
+  // can use the same pdf ID, so in the end this for loop will map each pdf ID
+  // to the last transition ID it encounters. However, in this specific program,
+  // this is okay because we do not really need the actual transition ID for
+  // each frame when decoding using a nnet2 model, see comments where
+  // pdfid_to_tid is referenced.
   for (size_t i = 0; i < tm_.NumTransitionIds(); i++) {
     pdfid_to_tid[tm_.TransitionIdToPdf(i)] = i;
   }
@@ -97,6 +102,20 @@ BaseFloat DnnGop::ComputeGopNumera(nnet2::DecodableAmNnet &decodable,
       if (!ctx_dep_.Compute(phoneseq, c, &pdf_id)) {
         KALDI_ERR << "Failed to obtain pdf_id";
       }
+
+      // As the comment at where pdfid_to_tid is initialized suggested, this tid
+      // may not be the real tid of the current frame, because the mapping from
+      // pdf id to tid is in fact one-to-many. However, when obtaining the
+      // log likelihood from a nnet2 decoding, this does not matter, and here is
+      // the explanation. decodable.LogLikelihood(frame, tid) uses tid as one of
+      // its inputs, and essentially what this function does is to get the value
+      // of log_probs_(frame, pdf_id) (kaldi's decodable-am-nnet.h), so what
+      // LogLikelihood() does is to convert tid to the pdf ID it is mapped to
+      // through trans_model_.TransitionIdToPdf(tid), and then calls log_probs_.
+      // This kaldi implementation looks really weird but I guess it is due to
+      // some legacy dependencies.
+      // To sum up, the value of tid is not correct here, but it does not
+      // matter, it is used to workaroud a kaldi ugliness.
       int32 tid = pdfid_to_tid[pdf_id];
 
       // The LogLikelihood() is not a probability -- it is P(s|o)/P(s), where s
