@@ -20,3 +20,6 @@ egs/gop-compute/utils
 
 # pyc
 *.pyc
+
+# fake test data
+egs/gop-compute/test_data/xyz/*
