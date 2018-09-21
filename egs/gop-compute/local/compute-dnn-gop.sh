@@ -69,6 +69,9 @@ mv $gopdir/gop.* $gopdir/gop
 for part in $(seq $nj); do 
   utils/int2sym.pl -f 2- $amdir/phones.txt $gopdir/phonemes.$part > $gopdir/phonemes_sym.$part || exit 1;
 done
+for n in $(seq $nj); do
+  cat $gopdir/phonemes_sym.$n || exit 1;
+done > $gopdir/phonemes_sym.txt || exit 1
 mv $gopdir/phonemes_sym.* $gopdir/gop
 
 python local/ctm2textgrid.py $nj $gopdir $gopdir/aligned_textgrid $lang/words.txt $lang/phones.txt $data/utt2dur
