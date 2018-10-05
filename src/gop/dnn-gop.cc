@@ -38,18 +38,13 @@ typedef typename Arc::StateId StateId;
 typedef typename Arc::Weight Weight;
 
 void DnnGop::Init(std::string &tree_in_filename,
-            std::string &model_in_filename,
-            std::string &lex_in_filename) {
+            std::string &model_in_filename) {
   bool binary;
   Input ki(model_in_filename, &binary);
   tm_.Read(ki.Stream(), binary);
   am_.Read(ki.Stream(), binary);
   ReadKaldiObject(tree_in_filename, &ctx_dep_);
 
-  fst::VectorFst<fst::StdArc> *lex_fst = fst::ReadFstKaldi(lex_in_filename);
-  std::vector<int32> disambig_syms;  
-  TrainingGraphCompilerOptions gopts;
-  gc_ = new TrainingGraphCompiler(tm_, ctx_dep_, lex_fst, disambig_syms, gopts);
   // Technically this mapping is not correct, because multiple transition IDs
   // can use the same pdf ID, so in the end this for loop will map each pdf ID
   // to the last transition ID it encounters. However, in this specific program,
@@ -59,26 +54,6 @@ void DnnGop::Init(std::string &tree_in_filename,
   for (size_t i = 0; i < tm_.NumTransitionIds(); i++) {
     pdfid_to_tid[tm_.TransitionIdToPdf(i)] = i;
   }
-}
-
-BaseFloat DnnGop::Decode(fst::VectorFst<fst::StdArc> &fst,
-                         nnet2::DecodableAmNnet &decodable,
-                         std::vector<int32> *align) {
-  FasterDecoderOptions decode_opts;
-  decode_opts.beam = 500; // number of beams for decoding. Larger, slower and more successful alignments. Smaller, more unsuccessful alignments.
-  FasterDecoder decoder(fst, decode_opts);
-  decoder.Decode(&decodable);
-  if (! decoder.ReachedFinal()) {
-    KALDI_WARN << "Did not successfully decode.";
-  }
-  fst::VectorFst<LatticeArc> decoded;
-  decoder.GetBestPath(&decoded);
-  std::vector<int32> osymbols;
-  LatticeWeight weight;
-  GetLinearSymbolSequence(decoded, align, &osymbols, &weight);
-  BaseFloat likelihood = -(weight.Value1()+weight.Value2());
-
-  return likelihood;
 }
 
 BaseFloat DnnGop::ComputeGopNumera(nnet2::DecodableAmNnet &decodable,
@@ -148,8 +123,6 @@ BaseFloat DnnGop::ComputeGopDenomin(nnet2::DecodableAmNnet &decodable,
 
   const std::vector<int32> &phone_syms = tm_.GetPhones();
 
-  // Vector<BaseFloat> likelihood(phone_syms.size());
-
   for (size_t i = 0; i < phone_syms.size(); i++) {
     int32 phone = phone_syms[i];
     phoneseq[1] = phone;
@@ -174,64 +147,76 @@ BaseFloat DnnGop::ComputeGopDenomin(nnet2::DecodableAmNnet &decodable,
     if (phn_likelihood > likelihood) {
       likelihood = phn_likelihood;
     }
-    // likelihood(i) = phn_likelihood;
   }
 
   return likelihood;
 }
 
-void DnnGop::GetContextFromSplit(std::vector<std::vector<int32> > split,
-                                 int32 index, int32 &phone_l, int32 &phone, int32 &phone_r) {
-  KALDI_ASSERT(index < split.size());
-  phone_l = (index > 0) ? tm_.TransitionIdToPhone(split[index-1][0]) : 1;
-  phone = tm_.TransitionIdToPhone(split[index][0]);
-  phone_r = (index < split.size() - 1) ? tm_.TransitionIdToPhone(split[index+1][0]): 1;
-}
-
 void DnnGop::Compute(const CuMatrix<BaseFloat> &feats,
-                     const std::vector<int32> &transcript) {
-  // Align
-  fst::VectorFst<fst::StdArc> ali_fst;
-  gc_->CompileGraphFromText(transcript, &ali_fst);
+             const std::vector<int32> &existing_phonemes,
+             std::vector<int32> &num_frames) {
+  // Compute logprob and do some sanity check
   nnet2::DecodableAmNnet ali_decodable(tm_, am_, feats, true, 1.0);
-  Decode(ali_fst, ali_decodable, &alignment_);
-  KALDI_ASSERT(feats.NumRows() == alignment_.size());
+  KALDI_ASSERT(existing_phonemes.size() == num_frames.size());
+  int32 num_phones = existing_phonemes.size();
+
+  // Deal with frame mismatch issue
+  int32 total_num_frames = 0;
+  for (auto& n : num_frames) {
+    total_num_frames += n;
+  }
+  int32 num_diff = feats.NumRows() - total_num_frames;
+  if (num_diff > 0) {
+    KALDI_LOG << "Append " << num_diff << " frames to the end of the input.";
+    num_frames.back() += num_diff;
+  }
+  else {
+    if (num_diff < 0) {
+      KALDI_LOG << "Remove " << -num_diff << " frames from the end of the input.";
+      int32 last_valid_chunk_idx = num_phones - 1;
+      while (last_valid_chunk_idx >= 0 && num_diff < 0) {
+        if (num_frames[last_valid_chunk_idx] >= (-num_diff)) {
+          // have enough frames to remove, remove and stop
+          num_frames[last_valid_chunk_idx] += num_diff;
+          num_diff = 0;
+        }
+        else {
+          // not enough, remove as much as possible
+          num_diff += num_frames[last_valid_chunk_idx];
+          num_frames[last_valid_chunk_idx] = 0;
+        }
+        last_valid_chunk_idx -= 1;
+      }
+    }
+  }
+  total_num_frames = 0;
+  for (auto& n : num_frames) {
+    total_num_frames += n;
+  }
+  KALDI_ASSERT(feats.NumRows() == total_num_frames);
 
   // GOP
-  std::vector<std::vector<int32> > split;
-  SplitToPhones(tm_, alignment_, &split);
-  gop_result_.Resize(split.size());
-  phones_.resize(split.size());
-  phones_loglikelihood_.Resize(split.size());
+  gop_result_.Resize(existing_phonemes.size());
   int32 frame_start_idx = 0;
-  for (MatrixIndexT i = 0; i < split.size(); i++) {
+  for (MatrixIndexT i = 0; i < num_phones; i++) {
     int32 phone, phone_l, phone_r;
-    GetContextFromSplit(split, i, phone_l, phone, phone_r);
+    phone_l = (i > 0) ? existing_phonemes[i-1] : 1;
+    phone = existing_phonemes[i];
+    phone_r = (i < num_phones - 1) ? existing_phonemes[i+1] : 1;
 
-    BaseFloat gop_numerator = ComputeGopNumera(ali_decodable, phone_l, phone, phone_r, frame_start_idx, split[i].size());
-    BaseFloat gop_denominator = ComputeGopDenomin(ali_decodable, phone_l, phone_r, frame_start_idx, split[i].size());
-    gop_result_(i) = (gop_numerator - gop_denominator) / split[i].size();
-    phones_[i] = phone;
-    phones_loglikelihood_(i) = gop_numerator;
-
-    frame_start_idx += split[i].size();
+    if (num_frames[i] > 0) {
+      BaseFloat gop_numerator = ComputeGopNumera(ali_decodable, phone_l, phone, phone_r, frame_start_idx, num_frames[i]);
+      BaseFloat gop_denominator = ComputeGopDenomin(ali_decodable, phone_l, phone_r, frame_start_idx, num_frames[i]);
+      gop_result_(i) = (gop_numerator - gop_denominator) / num_frames[i];
+    }
+    else {
+      gop_result_(i) = 0;
+    }
+    frame_start_idx += num_frames[i];
   }
 }
 
 Vector<BaseFloat>& DnnGop::Result() {
   return gop_result_;
 }
-
-Vector<BaseFloat>& DnnGop::get_phn_ll() {
-  return phones_loglikelihood_;
-}
-
-std::vector<int32>& DnnGop::get_alignment() {
-  return alignment_;
-}
-
-std::vector<int32>& DnnGop::Phonemes() {
-  return phones_;
-}
-
 }  // End namespace kaldi

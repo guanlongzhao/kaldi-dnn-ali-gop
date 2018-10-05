@@ -36,28 +36,18 @@ class DnnGop {
 public:
   DnnGop() {}
   void Init(std::string &tree_in_filename,
-            std::string &model_in_filename,
-            std::string &lex_in_filename);
-  void Compute(const CuMatrix<BaseFloat> &feats, const std::vector<int32> &transcript);
+            std::string &model_in_filename);
+  void Compute(const CuMatrix<BaseFloat> &feats,
+               const std::vector<int32> &existing_phonemes,
+               std::vector<int32> &num_frames);
   Vector<BaseFloat>& Result();
-  std::vector<int32>& get_alignment();
-  std::vector<int32>& Phonemes();
-  Vector<BaseFloat>& get_phn_ll();
 
 protected:
   nnet2::AmNnet am_;
   TransitionModel tm_;
   ContextDependency ctx_dep_;
-  TrainingGraphCompiler *gc_;
   std::map<int32, int32> pdfid_to_tid;
-  Vector<BaseFloat> gop_result_;
-  std::vector<int32> alignment_;
-  std::vector<int32> phones_;
-  Vector<BaseFloat> phones_loglikelihood_; // phoneme log likelihood
-
-  BaseFloat Decode(fst::VectorFst<fst::StdArc> &fst,
-                   nnet2::DecodableAmNnet &decodable,
-                   std::vector<int32> *align = NULL);                   
+  Vector<BaseFloat> gop_result_;               
   BaseFloat ComputeGopNumera(nnet2::DecodableAmNnet &decodable,
                                     int32 phone_l, int32 phone, int32 phone_r,
                                     MatrixIndexT start_frame,
@@ -66,8 +56,6 @@ protected:
                               int32 phone_l, int32 phone_r,
                               MatrixIndexT start_frame,
                               int32 size);
-  void GetContextFromSplit(std::vector<std::vector<int32> > split,
-                           int32 index, int32 &phone_l, int32 &phone, int32 &phone_r);
 };
 
 }  // End namespace kaldi

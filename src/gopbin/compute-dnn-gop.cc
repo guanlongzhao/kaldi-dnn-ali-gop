@@ -26,10 +26,10 @@ int main(int argc, char *argv[]) {
     
     const char *usage =
         "Compute GOP with DNN-based models.\n"
-        "Usage:   compute-dnn-gop [options] tree-in model-in lexicon-fst-in feature-rspecifier "
-        "transcriptions-rspecifier gop-wspecifier alignment-wspecifier phoneme_log_likelihood-wspecifier phoneme-wspecifier\n"
+        "Usage:   compute-dnn-gop [options] tree-in model-in feature-rspecifier "
+        "gop-wspecifier phoneme-rspecifier numframe-rspecifier\n"
         "e.g.: \n"
-        " compute-gmm-gop tree 1.mdl lex.fst scp:train.scp ark:train.tra ark,t:gop.1 ark,t:algin.1 ark,t:phn_ll.1 ark,t:1.phoneme\n";
+        " compute-dnn-gop tree 1.mdl scp:train.scp ark,t:gop.1 ark:phoneme.txt ark:numframes.txt\n";
 
     ParseOptions po(usage);
     std::string use_gpu = "no";
@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
                  "yes|no|optional|wait, only has effect if compiled with CUDA");
 
     po.Read(argc, argv);
-    if (po.NumArgs() != 9) {
+    if (po.NumArgs() != 6) {
       po.PrintUsage();
       exit(1);
     }
@@ -48,28 +48,23 @@ int main(int argc, char *argv[]) {
 
     std::string tree_in_filename = po.GetArg(1);
     std::string model_in_filename = po.GetArg(2);
-    std::string lex_in_filename = po.GetArg(3);
-    std::string feature_rspecifier = po.GetArg(4);
-    std::string transcript_rspecifier = po.GetArg(5);
-    std::string gop_wspecifier = po.GetArg(6);
-    std::string alignment_wspecifier = po.GetArg(7);
-    std::string phn_ll_wspecifier = po.GetArg(8);
-    std::string phoneme_wspecifier = po.GetArg(9);
+    std::string feature_rspecifier = po.GetArg(3);
+    std::string gop_wspecifier = po.GetArg(4);
+    std::string phoneme_rspecifier = po.GetArg(5);
+    std::string frame_rspecifier = po.GetArg(6);
 
     SequentialBaseFloatCuMatrixReader feature_reader(feature_rspecifier);
-    RandomAccessInt32VectorReader transcript_reader(transcript_rspecifier);
     BaseFloatVectorWriter gop_writer(gop_wspecifier);
-    Int32VectorWriter alignment_writer(alignment_wspecifier);
-    BaseFloatVectorWriter phn_ll_writer(phn_ll_wspecifier);
-    Int32VectorWriter phoneme_writer(phoneme_wspecifier);
+    RandomAccessInt32VectorReader phoneme_reader(phoneme_rspecifier);
+    RandomAccessInt32VectorReader frame_reader(frame_rspecifier);
 
     DnnGop gop;
-    gop.Init(tree_in_filename, model_in_filename, lex_in_filename);
+    gop.Init(tree_in_filename, model_in_filename);
 
     // Compute for each utterance
     for (; !feature_reader.Done(); feature_reader.Next()) {
       std::string utt = feature_reader.Key();
-      if (! transcript_reader.HasKey(utt)) {
+      if (!(phoneme_reader.HasKey(utt) && frame_reader.HasKey(utt))) {
         KALDI_WARN << "Can not find alignment for utterance " << utt;        
         continue;
       }
@@ -77,13 +72,12 @@ int main(int argc, char *argv[]) {
       KALDI_LOG << "Processing utterance " << utt;
 
       const CuMatrix<BaseFloat> &features = feature_reader.Value();
-      const std::vector<int32> &transcript = transcript_reader.Value(utt);
+      const std::vector<int32> &existing_phonemes = phoneme_reader.Value(utt);
+      std::vector<int32> num_frames = frame_reader.Value(utt);
+      std::vector<int32> &num_frames_var = num_frames;
 
-      gop.Compute(features, transcript);
+      gop.Compute(features, existing_phonemes, num_frames_var);
       gop_writer.Write(utt, gop.Result());
-      alignment_writer.Write(utt, gop.get_alignment());
-      phn_ll_writer.Write(utt, gop.get_phn_ll());
-      phoneme_writer.Write(utt, gop.Phonemes());
     }
     KALDI_LOG << "Done.";
 # if HAVE_CUDA==1
