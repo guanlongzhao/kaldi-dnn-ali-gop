@@ -11,7 +11,7 @@ add_definitions(-Wno-deprecated-declarations)
 include_directories("${KALDI_ROOT}/src")
 include_directories("${KALDI_ROOT}/tools/openfst/include")
 # atlas header files are not in the system path
-include_directories("${KALDI_ROOT}/tools/ATLAS/include")
+include_directories("${KALDI_ROOT}/tools/ATLAS_headers/include")
 
 # gop
 include_directories(".")
