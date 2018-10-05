@@ -44,19 +44,8 @@ echo "$0: feature type is lda"
 feats="ark,s,cs:apply-cmvn --utt2spk=ark:$sdata/JOB/utt2spk scp:$sdata/JOB/cmvn.scp scp:$sdata/JOB/feats.scp ark:- | splice-feats $splice_opts ark:- ark:- | transform-feats $amdir/final.mat ark:- ark:- |"
 
 echo "$0: computing GOP in $data using model from $amdir, putting results in $gopdir"
-tra="ark:utils/sym2int.pl --map-oov $oov -f 2- $lang/words.txt $sdata/JOB/text|";
 $cmd JOB=1:$nj $gopdir/log/gop.JOB.log \
-  compute-dnn-gop --use-gpu=yes $amdir/tree $amdir/final.mdl $lang/L.fst "$feats" "$tra" "ark,t:$gopdir/gop.JOB" "ark,t:$gopdir/align.JOB" "ark,t:$gopdir/phoneme_ll.JOB" "ark,t:$gopdir/phonemes.JOB" || exit 1;
-
-# Generate alignment
-$cmd JOB=1:$nj $gopdir/log/align.JOB.log \
-  linear-to-nbest "ark,t:$gopdir/align.JOB" "$tra" "" "" "ark:-" \| \
-  lattice-align-words "$lang/phones/word_boundary.int" "$amdir/final.mdl" "ark:-" "ark,t:$gopdir/aligned.JOB" || exit 1;
-$cmd JOB=1:$nj $gopdir/log/align_word.JOB.log \
-  nbest-to-ctm "ark,t:$gopdir/aligned.JOB" "$gopdir/word.JOB.ctm"
-$cmd JOB=1:$nj $gopdir/log/align_phone.JOB.log \
-  lattice-to-phone-lattice "$amdir/final.mdl" "ark,t:$gopdir/aligned.JOB" "ark:-" \| \
-  nbest-to-ctm "ark:-" "$gopdir/phone.JOB.ctm" || exit 1;
+  compute-dnn-gop --use-gpu=yes $amdir/tree $amdir/final.mdl "$feats" "ark,t:$gopdir/gop.JOB" "ark:$data/alignment.txt" "ark:$data/numframes.txt" || exit 1;
 
 # Put all GOPs in the same file and move them together
 for n in $(seq $nj); do
@@ -64,16 +53,5 @@ for n in $(seq $nj); do
 done > $gopdir/gop.txt || exit 1
 mkdir $gopdir/gop
 mv $gopdir/gop.* $gopdir/gop
-
-# Convert phonemes into human readable format
-for part in $(seq $nj); do 
-  utils/int2sym.pl -f 2- $amdir/phones.txt $gopdir/phonemes.$part > $gopdir/phonemes_sym.$part || exit 1;
-done
-for n in $(seq $nj); do
-  cat $gopdir/phonemes_sym.$n || exit 1;
-done > $gopdir/phonemes_sym.txt || exit 1
-mv $gopdir/phonemes_sym.* $gopdir/gop
-
-python local/ctm2textgrid.py $nj $gopdir $gopdir/aligned_textgrid $lang/words.txt $lang/phones.txt $data/utt2dur
 
 echo "$0: done computing GOP and generating alignments."

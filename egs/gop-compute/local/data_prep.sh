@@ -35,6 +35,8 @@ wav_scp=$dst/wav.scp; [[ -f "$wav_scp" ]] && rm $wav_scp
 trans=$dst/text; [[ -f "$trans" ]] && rm $trans
 utt2spk=$dst/utt2spk; [[ -f "$utt2spk" ]] && rm $utt2spk
 spk2gender=$dst/spk2gender; [[ -f $spk2gender ]] && rm $spk2gender
+existing_align=$dst/alignment.txt; [[ -f ${existing_align} ]] && rm ${existing_align}
+numframes=$dst/numframes.txt; [[ -f ${numframes} ]] && rm ${numframes}
 
 # Get wav.scp, utt2spk, and text
 reader_dir=$src
@@ -67,6 +69,14 @@ utils/utt2spk_to_spk2utt.pl <$utt2spk >$spk2utt || exit 1
 # Get spk2gender
 [ ! -f $src/spk2gender ] && echo "$0: expected file $src/spk2gender to exist" && exit 1;
 cp $src/spk2gender $spk2gender
+
+# Get alignment.txt
+[ ! -f $src/alignment.txt ] && echo "$0: expected file $src/alignment.txt to exist" && exit 1;
+cp $src/alignment.txt ${existing_align}
+
+# Get alignment.txt
+[ ! -f $src/numframes.txt ] && echo "$0: expected file $src/numframes.txt to exist" && exit 1;
+cp $src/numframes.txt ${numframes}
 
 # Validation
 utils/validate_data_dir.sh --no-feats $dst || exit 1;
